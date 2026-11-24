@@ -1,4 +1,4 @@
-var NashiPages = (() => {
+var PeraPages = (() => {
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -40,12 +40,12 @@ var NashiPages = (() => {
   });
 
   // scripts/pages-runtime.js
-  if (typeof globalThis.atob !== "function") globalThis.atob = (value) => _nashiBase64Decode(String(value));
-  if (typeof globalThis.btoa !== "function") globalThis.btoa = (value) => _nashiBase64Encode(String(value));
+  if (typeof globalThis.atob !== "function") globalThis.atob = (value) => _peraBase64Decode(String(value));
+  if (typeof globalThis.btoa !== "function") globalThis.btoa = (value) => _peraBase64Encode(String(value));
   if (typeof globalThis.TextEncoder !== "function") {
     globalThis.TextEncoder = class {
       encode(value = "") {
-        const bytes2 = atob(_nashiUTF8Encode(String(value)));
+        const bytes2 = atob(_peraUTF8Encode(String(value)));
         return Uint8Array.from(bytes2, (character2) => character2.charCodeAt(0));
       }
     };
@@ -66,14 +66,14 @@ var NashiPages = (() => {
           return binary.replace(/[\x80-\x9F]/g, (character2) => high[character2.charCodeAt(0) - 128]);
         }
         for (let i = 0; i < view.length; i += 8192) binary += String.fromCharCode(...view.subarray(i, i + 8192));
-        return _nashiUTF8Decode(btoa(binary));
+        return _peraUTF8Decode(btoa(binary));
       }
     };
   }
   if (typeof globalThis.crypto === "undefined") globalThis.crypto = {};
   if (typeof globalThis.crypto.getRandomValues !== "function") {
     globalThis.crypto.getRandomValues = (array) => {
-      const binary = atob(_nashiRandom(array.byteLength));
+      const binary = atob(_peraRandom(array.byteLength));
       const bytes2 = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
       for (let i = 0; i < bytes2.length; i++) bytes2[i] = binary.charCodeAt(i);
       return array;
@@ -20292,7 +20292,7 @@ ${text}`;
 
   // scripts/pages-interop-entry.js
   function check() {
-    if (typeof _nashiCheckCancelled === "function" && _nashiCheckCancelled()) throw new Error("Operation cancelled.");
+    if (typeof _peraCheckCancelled === "function" && _peraCheckCancelled()) throw new Error("Operation cancelled.");
   }
   function bytes(base642) {
     const text = atob(base642);
