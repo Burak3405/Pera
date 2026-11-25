@@ -1,0 +1,155 @@
+name: Windows
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: '10.0.x'
+      - name: Audit and publish Windows x64
+        shell: pwsh
+        run: |
+          dotnet restore windows/Pera.Windows --locked-mode
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet publish windows/Pera.Windows -c Release --no-restore -o build/windows/Pera
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Real WPF photo preview responsiveness regression
+        shell: pwsh
+        run: |
+          for ($attempt=1; $attempt -le 2; $attempt++) {
+            $directory = Join-Path '${{ github.workspace }}\build\windows-smoke' "photo-preview-$attempt"
+            New-Item -ItemType Directory -Force $directory | Out-Null
+            $start = [System.Diagnostics.ProcessStartInfo]::new((Resolve-Path build/windows/Pera/Pera.exe))
+            $start.UseShellExecute = $false
+            $start.Environment['PERA_SMOKE_DIRECTORY'] = $directory
+            $start.ArgumentList.Add('--editor-smoke-test')
+            $start.ArgumentList.Add('--photo-only')
+            $process = [System.Diagnostics.Process]::Start($start)
+            try {
+              if (!$process.WaitForExit(120000)) {
+                $process.Kill($true)
+                throw "Photo-preview regression attempt $attempt did not terminate"
+              }
+              if ($process.ExitCode -ne 0) {
+                if (Test-Path (Join-Path $directory 'error.txt')) { Get-Content (Join-Path $directory 'error.txt') }
+                if (Test-Path (Join-Path $directory 'photo-timeout.txt')) { Get-Content (Join-Path $directory 'photo-timeout.txt') }
+                throw "Photo-preview regression attempt $attempt failed: $($process.ExitCode)"
+              }
+              $report = Get-Content (Join-Path $directory 'editor-result.json') -Raw | ConvertFrom-Json
+              if ($report.passed -lt 5) { throw "Photo-preview regression checked too few assertions: $($report.passed)" }
+              Write-Host "Photo-preview attempt $($attempt): $($report.passed) native assertions passed"
+            } finally { $process.Dispose() }
+          }
+      - name: Install verified media tools and exercise real exports
+        shell: pwsh
+        env:
+          PERA_VERIFY_DOWNLOAD_TOOLS: '1'
+          PERA_VERIFY_TOOLS_DIRECTORY: '${{ runner.temp }}\Pera-Test-Tools'
+        run: |
+          dotnet run --project windows/Pera.Verify -c Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Windows native image PDF ZIP and WPF render checks
+        shell: pwsh
+        env:
+          PERA_SMOKE_DIRECTORY: '${{ github.workspace }}\build\windows-smoke'
+        run: |
+          $proof = $env:PERA_SMOKE_DIRECTORY
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
+          cmd /d /c "call `"$vcvars`" && cl /nologo /std:c++20 /EHsc /W4 /DPERA_TRACE_LIBRARY /LD windows\Diagnostics\NativeDebugRunner.cpp /Fe:build\NativeShutdownTrace.dll && cl /nologo /std:c++20 /EHsc /W4 windows\Diagnostics\NativeDebugRunner.cpp /Fe:build\NativeDebugRunner.exe /link dbghelp.lib"
+          if ($LASTEXITCODE -ne 0) { throw 'Native diagnostics did not compile' }
+          function Invoke-NativeFixture([string] $directory) {
+            $env:PERA_SMOKE_DIRECTORY = $directory
+            New-Item -ItemType Directory -Force $directory | Out-Null
+            $start = [System.Diagnostics.ProcessStartInfo]::new((Resolve-Path build/windows/Pera/Pera.exe))
+            $start.UseShellExecute = $false
+            $start.ArgumentList.Add('--smoke-test')
+            $process = [System.Diagnostics.Process]::Start($start)
+            try {
+              $processHandle = $process.Handle
+              if (!$process.WaitForExit(900000)) {
+                $process.Kill($true)
+                throw 'Native desktop checks exceeded 15 minutes'
+              }
+              Write-Host "Native desktop process exit code: $($process.ExitCode); fixture: $directory"
+              return $process.ExitCode
+            } finally { $process.Dispose() }
+          }
+          $env:PERA_NATIVE_TRACE_LIBRARY = (Resolve-Path build/NativeShutdownTrace.dll).Path
+          $exitCode = Invoke-NativeFixture $proof
+          if ($exitCode -eq 0) {
+            Remove-Item Env:PERA_NATIVE_TRACE_LIBRARY
+            $exitCode = Invoke-NativeFixture (Join-Path $proof 'second-pass')
+          }
+          if ($exitCode -ne 0) {
+            $hasFrames = $false
+            Get-ChildItem $proof -Filter native-exception-stack.txt -Recurse | ForEach-Object {
+              if ((Get-Content $_.FullName -Raw) -match "FRAME\t") {
+                $hasFrames = $true
+                & build/NativeDebugRunner.exe --resolve-stack $_.FullName | Tee-Object -FilePath ($_.FullName + '.resolved.txt')
+              }
+            }
+            if (!$hasFrames) {
+              $env:PERA_SMOKE_DIRECTORY = Join-Path $proof 'native-debug'
+              New-Item -ItemType Directory -Force $env:PERA_SMOKE_DIRECTORY | Out-Null
+              & build/NativeDebugRunner.exe (Resolve-Path build/windows/Pera/Pera.exe) --smoke-test 2>&1 | Tee-Object -FilePath (Join-Path $proof 'native-stack.txt')
+            }
+            Start-Sleep -Seconds 3
+            Get-WinEvent -FilterHashtable @{LogName='Application'; Id=1000,1001,1026; StartTime=(Get-Date).AddMinutes(-20)} -ErrorAction SilentlyContinue | Select-Object -First 8 TimeCreated,ProviderName,Id,Message | Format-List | Out-String | Write-Host
+            throw "Native desktop checks exited with code $exitCode"
+          }
+          foreach ($directory in @($proof, (Join-Path $proof 'second-pass'))) {
+            if (!(Test-Path (Join-Path $directory 'smoke.json'))) { throw 'No native smoke result' }
+            Get-Content (Join-Path $directory 'smoke.json')
+          }
+      - name: Focused interaction completion and timeout recovery
+        shell: pwsh
+        run: |
+          foreach ($fixture in @(
+            @{Name='focused'; Arguments=@('--smoke-test-interactions'); ExitCode=0},
+            @{Name='focused-timeout'; Arguments=@('--smoke-test-interactions','--timeout-seconds','1'); ExitCode=1}
+          )) {
+            $directory = Join-Path '${{ github.workspace }}\build\windows-smoke' $fixture.Name
+            New-Item -ItemType Directory -Force $directory | Out-Null
+            $start = [System.Diagnostics.ProcessStartInfo]::new((Resolve-Path build/windows/Pera/Pera.exe))
+            $start.UseShellExecute = $false
+            $start.Environment['PERA_SMOKE_DIRECTORY'] = $directory
+            foreach ($argument in $fixture.Arguments) { $start.ArgumentList.Add($argument) }
+            $process = [System.Diagnostics.Process]::Start($start)
+            try {
+              if (!$process.WaitForExit(150000)) { $process.Kill($true); throw 'Focused interaction process did not terminate' }
+              if ($process.ExitCode -ne $fixture.ExitCode) { throw "Unexpected focused interaction exit code: $($process.ExitCode)" }
+              $report = Get-Content (Join-Path $directory 'interactions.json') -Raw | ConvertFrom-Json
+              if ($fixture.ExitCode -eq 0 -and ($report.checks -lt 21 -or $report.failures.Count -ne 0)) { throw 'Focused interactions did not complete' }
+              if ($fixture.ExitCode -eq 1 -and $report.failures -notcontains 'Focused native interaction checks timed out.') { throw 'No timeout failure report' }
+              Write-Host "$($fixture.Name): exit=$($process.ExitCode); checks=$($report.checks); failures=$($report.failures.Count)"
+            } finally { $process.Dispose() }
+          }
+      - name: Package portable app
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build/windows/Pera/* -DestinationPath build/Pera-Windows-x64.zip
+          Get-FileHash build/Pera-Windows-x64.zip -Algorithm SHA256
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: windows-preview
+          path: |
+            build/Pera-Windows-x64.zip
+            build/windows-smoke
+          retention-days: 7
+          if-no-files-found: error
