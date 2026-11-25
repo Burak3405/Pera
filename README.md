@@ -10,6 +10,14 @@ Pera, Orkun Işıtmak'ın açık kaynak [Nashi](https://github.com/orkunisitmak/
 
 Medya ve ofis araçları (FFmpeg, yt-dlp, Deno, LibreOffice) ilk açılışta **Kurulumu tamamla → Eksik araçları indir** ile kendi resmi kaynaklarından indirilir ve doğrulanır. Ayrıntılar: [araçlar, sürümler ve lisanslar](docs/dependencies.md).
 
+## İndirme ve kurulum
+
+1. [Releases](https://github.com/Burak3405/Pera/releases) sayfasından en yeni `Pera-Windows-x64.zip` dosyasını indir.
+2. ZIP'i istediğin bir klasöre çıkar ve `Pera.exe`'yi çalıştır. Kurulum gerekmez.
+3. Pera imzasız olduğu için Windows ilk açılışta "Windows bilgisayarınızı korudu" uyarısı gösterebilir. **Ek bilgi → Yine de çalıştır** ile açabilirsin.
+
+Pera kendini otomatik güncellemez. Yeni sürüm çıktığında Releases sayfasından yeni ZIP'i indirip eski klasörün yerine koyman yeterli; ayarların ve kitaplığın `%LOCALAPPDATA%\Pera` içinde durduğu için kaybolmaz. Yeni sürümlerden haberdar olmak için GitHub'da **Watch → Custom → Releases** seçebilirsin.
+
 ## Kısayollar
 
 - **Sürüklerken:** Bir dosyayı herhangi bir uygulamada sürüklerken **Ctrl** araçlar, **Shift** dönüştürme, **Alt** dosya işlemleri çarkını açar. Tuşlar Ayarlar → Genel'den değiştirilebilir. Her seçeneğin açıklaması uygulamadaki **Araçlar ve kısayollar → Çark rehberi** bölümündedir.

@@ -1586,5 +1586,7 @@
   "Updates aren’t set up for this version yet.": "Bu sürüm için güncellemeler henüz ayarlanmadı.",
   "Updates are not set up for this build. Your existing app was kept.": "Bu sürüm için güncellemeler ayarlanmadı. Mevcut uygulaman korundu.",
   "Based on Nashi by Orkun Işıtmak, used under the MIT license.": "Orkun Işıtmak'ın Nashi projesine dayanır; MIT lisansıyla kullanılmaktadır.",
-  "Nashi on GitHub": "GitHub'da Nashi"
+  "Nashi on GitHub": "GitHub'da Nashi",
+  "New Pera versions are published on its GitHub Releases page. Download the latest ZIP from there whenever you like.": "Pera'nın yeni sürümleri GitHub'daki Releases sayfasında yayınlanır. En yeni ZIP'i dilediğin zaman oradan indirebilirsin.",
+  "Open Releases page": "Releases sayfasını aç"
 }
