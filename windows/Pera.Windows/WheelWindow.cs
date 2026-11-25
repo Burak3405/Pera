@@ -36,7 +36,7 @@ public sealed class WheelWindow:Window
     private void Highlight(int index)
     {
         if(selected==index)return;selected=index;
-        for(var i=0;i<sectors.Count;i++){sectors[i].Fill=i==index?Theme.Brush("Sage"):Theme.Brush("Inset");sectors[i].Stroke=i==index?Theme.Brush("Gold"):Theme.Brush("Line");sectors[i].StrokeThickness=i==index?2:1;}
+        for(var i=0;i<sectors.Count;i++){sectors[i].Fill=WheelPresentation.SliceFill(i,i==index);sectors[i].Stroke=WheelPresentation.SliceStroke(i==index);sectors[i].StrokeThickness=i==index?2:1;}
         if(index>=0)Feedback.Play();
     }
     private readonly bool externalDrag;private readonly Func<string,IReadOnlyList<ToolChoice>>? modes;private string mode="tools";
@@ -71,17 +71,20 @@ public sealed class WheelWindow:Window
         var count=Math.Min(12,tools.Count);
         for(var i=0;i<count;i++)
         {
-            var choice=tools[i];var angle=(WheelPresentation.StartAngle(count)+360d*i/count)*Math.PI/180;var half=(180d/count-1)*Math.PI/180;var a=angle-half;var b=angle+half;
+            var choice=tools[i];var angle=(WheelPresentation.StartAngle(count)+360d*i/count)*Math.PI/180;var half=WheelPresentation.HalfAngle(count);var a=angle-half;var b=angle+half;
             Point P(double r,double v)=>new(270+r*Math.Cos(v),270+r*Math.Sin(v));
             var geometry=new StreamGeometry();using(var g=geometry.Open()){g.BeginFigure(P(108,a),true,true);g.LineTo(P(250,a),true,false);g.ArcTo(P(250,b),new Size(250,250),0,b-a>Math.PI,SweepDirection.Clockwise,true,false);g.LineTo(P(108,b),true,false);g.ArcTo(P(108,a),new Size(108,108),0,b-a>Math.PI,SweepDirection.Counterclockwise,true,false);}geometry.Freeze();
-            var path=new System.Windows.Shapes.Path{Data=geometry,Fill=Theme.Brush("Inset"),Stroke=Theme.Brush("Line"),StrokeThickness=1};canvas.Children.Add(path);sectors.Add(path);
+            var path=new System.Windows.Shapes.Path{Data=geometry,Fill=WheelPresentation.SliceFill(i,false),Stroke=WheelPresentation.SliceStroke(false),StrokeThickness=1};canvas.Children.Add(path);sectors.Add(path);
             var (label,location)=WheelPresentation.Caption(choice,geometry,angle,half,count);
-            var button=new Button{Style=(Style)Application.Current.FindResource("WheelLabelButton"),Content=label,Width=label.DesiredSize.Width,Height=label.DesiredSize.Height,Background=Brushes.Transparent,Foreground=Theme.Brush("Ink"),Padding=new(0),BorderThickness=new(0)};Canvas.SetLeft(button,location.X-button.Width/2);Canvas.SetTop(button,location.Y-button.Height/2);canvas.Children.Add(button);buttons.Add(button);var index=i;
+            var button=new Button{Style=(Style)Application.Current.FindResource("WheelLabelButton"),Content=label,Width=label.DesiredSize.Width,Height=label.DesiredSize.Height,Background=Brushes.Transparent,Foreground=WheelPresentation.Ink,Padding=new(0),BorderThickness=new(0),ToolTip=WheelPresentation.Preferences.WheelLabels=="iconOnly"?L10n.Text(choice.Title):null};
+            if(WheelPresentation.Preferences.WheelLabels=="iconOnly")System.Windows.Automation.AutomationProperties.SetName(button,L10n.Text(choice.Title));Canvas.SetLeft(button,location.X-button.Width/2);Canvas.SetTop(button,location.Y-button.Height/2);canvas.Children.Add(button);buttons.Add(button);var index=i;
             button.Click+=(_,_)=>{Close();select(choice);};button.MouseEnter+=(_,_)=>Highlight(index);button.GotKeyboardFocus+=(_,_)=>Highlight(index);
             path.MouseLeftButtonUp+=(_,_)=>{Close();select(choice);};path.MouseEnter+=(_,_)=>Highlight(index);
         }
         var centerLabel=new StackPanel();centerLabel.Children.Add(L10n.Label(new TextBlock{Text=externalDrag?"Arrange window":tools.All(t=>t.Id.StartsWith("convert:"))?"Convert":tools.Any(t=>t.Id=="float")?"File actions":"Tools",FontSize=externalDrag?17:20,FontWeight=FontWeights.SemiBold,TextAlignment=TextAlignment.Center}));centerLabel.Children.Add(L10n.Label(new TextBlock{Text=externalDrag?"Release to place · Esc cancels":"Esc to close",FontSize=externalDrag?9:11,TextAlignment=TextAlignment.Center,Foreground=Theme.Brush("Muted"),Margin=new(0,6,0,0)}));
-        var center=new Button{Style=(Style)Application.Current.FindResource("WheelLabelButton"),Focusable=false,Content=centerLabel,Width=180,Height=180,Background=Brushes.Transparent,Foreground=Theme.Brush("Ink")};Canvas.SetLeft(center,180);Canvas.SetTop(center,180);canvas.Children.Add(center);center.Click+=(_,_)=>Close();
+        if(WheelPresentation.Preferences.WheelFinish=="pera")foreach(var text in centerLabel.Children.OfType<TextBlock>().Skip(1))text.Foreground=new SolidColorBrush(Color.FromRgb(0x59,0x66,0x50));
+        var centerContent=externalDrag?null:WheelPresentation.CenterArt(120);
+        var center=new Button{Style=(Style)Application.Current.FindResource("WheelLabelButton"),Focusable=false,Content=centerContent??centerLabel,Width=180,Height=180,Background=Brushes.Transparent,Foreground=WheelPresentation.Ink,ToolTip=centerContent is null?null:L10n.Text("Esc to close")};Canvas.SetLeft(center,180);Canvas.SetTop(center,180);canvas.Children.Add(center);center.Click+=(_,_)=>Close();
         if(IsLoaded&&!externalDrag&&buttons.Count>0)buttons[0].Focus();
     }
 }
