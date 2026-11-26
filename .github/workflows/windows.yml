@@ -2,6 +2,9 @@ name: Windows
 on:
   push:
     branches: [main]
+    # A v* tag (e.g. v0.1.0) runs every test, then the release job publishes the tested ZIP.
+    # GitHub does not apply path filters to tag pushes.
+    tags: ['v*']
     paths-ignore: ['**.md']
   pull_request:
     paths-ignore: ['**.md']
@@ -155,3 +158,37 @@ jobs:
             build/windows-smoke
           retention-days: 7
           if-no-files-found: error
+  release:
+    # Runs only for v* tags and only after every Windows check above passed.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' windows/Directory.Build.props | head -1)
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::Tag $TAG does not match windows/Directory.Build.props version $version"; exit 1
+          fi
+          notes="docs/releases/$TAG.md"
+          if [ ! -f "$notes" ]; then echo "::error::Missing release notes: $notes"; exit 1; fi
+          mkdir -p dist
+          gh run download "${{ github.run_id }}" --repo "${{ github.repository }}" --name windows-preview --dir dist
+          zip=dist/Pera-Windows-x64.zip
+          test -f "$zip"
+          hash=$(sha256sum "$zip" | cut -d' ' -f1)
+          cp "$notes" release-notes.md
+          printf '\n---\n\n`Pera-Windows-x64.zip` SHA-256: `%s`\n' "$hash" >> release-notes.md
+          gh release create "$TAG" "$zip" --repo "${{ github.repository }}" --verify-tag --title "Pera $TAG" --notes-file release-notes.md
